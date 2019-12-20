@@ -69,6 +69,7 @@ class VirtualChannel:
         self.name= name
         self.last_ping = None
         self.__checkOp = 0
+        self._readBuffer = None
         self.mutex = threading.Lock()
     
     def ActionWait(self):
@@ -201,38 +202,46 @@ class VirtualChannel:
     
     def Read(self):
         data = self.ReadRaw();
-        #print(data)
-        if not data:
+        if data==None:
             return None
+        
+        self.mutex.acquire()
+        if self._readBuffer ==None:
+            self._readBuffer = data
+        else:
+            self._readBuffer += data 
+        
+        data = self._readBuffer
         trace(0,"read len #" + str(len(data)))
         size = network_read_int(data, 0)
         #data = self.ReadRaw(size=size);
         #print(data)
         if len(data)<size+4:
-            trace(0,"size mismatch message:" + str(data))
-            data += self.ReadRaw(timeout=1000)
-        if len(data)<size+4:
-            trace(0,"size mismatch message:" + str(data))
-            raise Exception("size mismatch read:%d message:%d" % (size+4,len(data)))
-        if len(data)>size:
+            trace(0,"waiting for buffer:" + str(data))
+            self.mutex.release()
+            return None 
+            
+        if len(data)>size+4:
             trace(0,"multiple message:" + str(data))
-            #if len(data)/2==size+4:
-            #    trace(0,"multiple message:" + str(data))
-            #else:    
-            #    raise Exception("size mismatch read:%d message:%d" % (size+4,len(data)))
+
+        msg = self._readBuffer[4:size+4]
+        self._readBuffer = self._readBuffer[size+4:]
+        self.mutex.release()
+
+        trace(0,"message:"+str(msg))        
+        command = struct.unpack('<B', msg[0:1])[0]
+        tid = struct.unpack('<B', msg[1:2])[0]
+        action = BaseAction(command=command,tid=tid,data=msg[2:])
+         
         #read all packets
-        offset = 0
-        actions = []
-        while offset<len(data):
-            msg_len = network_read_int(data, offset)
-            msg = data[offset+4:offset+msg_len+4]
-            print(data[offset+4:offset+msg_len+4])
-            offset = offset + msg_len + 4
-            command = struct.unpack('<B', msg[0:1])[0]
-            tid = struct.unpack('<B', msg[1:2])[0]
-            action = BaseAction(command=command,tid=tid,data=msg[2:])
-            actions.append(action)
-        return actions   
+        #offset = 0
+        #actions = []
+        #while offset<len(data):
+        #    msg_len = network_read_int(data, offset)
+
+        #    actions.append(action)
+        
+        return [action]   
     
     def Ping(self):
         return PingAction()       

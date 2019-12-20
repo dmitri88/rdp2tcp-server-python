@@ -21,6 +21,7 @@ TUNAF_IPV6=2
 
 class BaseAction():    
     def __init__(self,tid=None,command=None, data=None):
+        self.data = data
         if tid!=None:
             self.tunnelId = int(tid)
         else:
@@ -30,8 +31,8 @@ class BaseAction():
         else:
             self.command = None
         if self.command<0 or self.command>R2TCMD_MAX:
-            raise Exception("invalid command "+str(self.command))
-        self.data = data
+            raise Exception("invalid tid #"+str(self.tunnelId)+" command "+str(self.command)+" data:"+str(self.data))
+        
         
         self.__parse(data)
     
@@ -56,7 +57,7 @@ class BaseAction():
         elif self.command==2:
             self.__class__=DataAction
         else:
-            raise Exception("unknown command "+str(self.command))
+            raise Exception("unknown command "+str(self.command)+" data:"+str(self.data))
         self.Parse(msgBuffer)
     
         
@@ -111,8 +112,9 @@ class CloseAction(BaseAction):
         
 class DataAction(BaseAction):
     def Ack(self,vchannel):
-        print("ack for action"+str(self))
+        #print("ack for action"+str(self))
         #vchannel.Write(self.tunnelId,R2TCMD_CLOSE,None)
+        pass
     
     def Execute(self,vchannel):
         print("execute for action"+str(self))
