@@ -15,6 +15,7 @@ from ctypes_ext import executeDll
 import threading
 import action
 from action import PingAction, BaseAction
+from tunnel import TunnelManager
 
 
 RDP2TCP_PING_DELAY = 5
@@ -78,7 +79,7 @@ class VirtualChannel:
             self.__checkOp=0
             return self.Read()
         else:
-            return [self.Ping()]
+            return self.Ping()
         
     def Open(self):
         self.mutex.acquire()
@@ -244,5 +245,5 @@ class VirtualChannel:
         return [action]   
     
     def Ping(self):
-        return PingAction()       
+        return [PingAction()]
 

@@ -65,7 +65,7 @@ class BaseAction():
         return str(self.__class__)+": tun:"+str(self.tunnelId)+" cmd:"+str(self.command)+" data:"+str(self.data)
     
 class PingAction(BaseAction):
-    def __init__(self):
+    def __init__(self,tid=0):
         super(PingAction, self).__init__(tid=0,command=R2TCMD_PING)
         
     def Ack(self,vchannel):
@@ -108,7 +108,8 @@ class CloseAction(BaseAction):
     def Execute(self,vchannel):
         print("execute for action"+str(self))
         tunnel=TunnelManager.get(self.tunnelId)  
-        tunnel.close()  
+        tunnel.handle_close()  
+        #tunnel.close()
         
 class DataAction(BaseAction):
     def Ack(self,vchannel):
