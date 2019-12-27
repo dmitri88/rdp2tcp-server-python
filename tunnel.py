@@ -8,8 +8,6 @@ import socket
 import threading
 import action
 
-x = threading.Thread(target=asyncore.loop, args=())
-x.start()
 class TunnelManager:
     
     tunnels = {}
@@ -24,9 +22,52 @@ class TunnelManager:
     
     @classmethod
     def restartPool(clz):
-        if clz.poolThread == None:
-            clz.poolThread = threading.Thread(target=asyncore.loop, args=())
-            clz.poolThread.start()
+        if clz.poolThread != None:
+            if clz.poolThread.isAlive():
+                return
+        clz.poolThread = threading.Thread(target=clz.loop, args=())
+        clz.poolThread.start()
+            
+    
+    @classmethod        
+    def keys(clz):
+        return clz.tunnels.keys()
+    
+    @classmethod     
+    def loop(clz,timeout=30.0, use_poll=False, map=None, count=None):
+        if map is None:
+            map = asyncore.socket_map
+    
+        if use_poll and hasattr(select, 'poll'):
+            poll_fun = asyncore.poll2
+        else:
+            poll_fun = asyncore.poll
+    
+        if count is None:
+            while map:
+                print("pooooooooool")
+                keys = list(clz.keys())
+                for c in keys:
+                    print("pool #"+str(c))
+                    tunnel = clz.get(c)
+                    #if tunnel.initialized and tunnel.checkalive:
+                    #    tunnel.check_alive()
+                poll_fun(timeout, map)
+    
+        else:
+            while map and count > 0:
+                poll_fun(timeout, map)
+                count = count - 1    
+        
+        print("EXIT POOL")
+        #create new map
+        keys = list(clz.keys())
+        for c in keys:
+            tunnel = clz.get(c)
+            map[tunnel._fileno]=tunnel
+            #tunnel.reconnect(restartPool = False)
+        #clz.restartPool()                
+        
         
     
 class Tunnel(asyncore.dispatcher_with_send):
@@ -56,6 +97,9 @@ class Tunnel(asyncore.dispatcher_with_send):
         if data:
             self.vchannel.Write(self.id,action.R2TCMD_DATA,data)
 
+            
+    def check_alive(self):
+        print("check alive #"+str(self.id))
     #def handle_write(self):
     #    sent = self.send(self.buffer)
     #    self.buffer = self.buffer[sent:]    
