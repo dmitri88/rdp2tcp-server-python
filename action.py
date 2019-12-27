@@ -108,8 +108,8 @@ class CloseAction(BaseAction):
     def Execute(self,vchannel):
         print("execute for action"+str(self))
         tunnel=TunnelManager.get(self.tunnelId)  
-        tunnel.handle_close()  
-        #tunnel.close()
+        #tunnel.handle_close()  
+        tunnel.close()
         
 class DataAction(BaseAction):
     def Ack(self,vchannel):

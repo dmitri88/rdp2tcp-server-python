@@ -37,24 +37,6 @@ def network_write_int(bufferData,offset,val):
         
 def network_read_int(bufferData,offset):
     return int.from_bytes(bufferData[0:4] , byteorder='big')   
-         
-
-def aaa():
-    hllApiProto = ctypes.WINFUNCTYPE (
-    ctypes.c_int,      # Return type.
-    ctypes.c_void_p,   # Parameters 1 ...
-    ctypes.c_void_p,
-    ctypes.c_void_p,
-    ctypes.c_void_p)   # ... thru 4.
-    hllApiParams = (1, "p1", 0), (1, "p2", 0), (1, "p3",0), (1, "p4",0),
-    
-    # Actually map the call ("HLLAPI(...)") to a Python name.
-    
-    WTSVirtualChannelOpen = wtsapi32Dll.WTSVirtualChannelOpen
-    WTSVirtualChannelOpen.restype = HANDLE
-    WTSVirtualChannelOpen.argtypes = [HANDLE,DWORD, LPSTR]
-    res = WTSVirtualChannelOpen(0,0,)
-
 
 def channel_init(chan_name):
     vchannel = VirtualChannel(chan_name)
