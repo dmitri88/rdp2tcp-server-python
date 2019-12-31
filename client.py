@@ -6,30 +6,33 @@ Created on Dec 27, 2019
 '''
 import os,sys
 import time
+from channel import BiStreamChannel
 
 
 def setup_parent_proc():
     f = open("/proc/"+str(os.getppid())+"/fd/0", "a")
     sys.stdout = f
+    sys.stderr = f
     print("initializing rdp2tcp client")
     
+class Client(BiStreamChannel):
+    def __init__(self):
+        super().__init__(server=False)
+    def ReadRaw(self,size):
+        return os.read(0, size)
+    def WriteRaw(self,data):
+        os.write(1, data)
+    
+    def loop(self):
+        while True:
+            self.ReadEvent()
+            #self._write("hello")
+            time.sleep(1)
+
+        
 
 def start_client():
-    f = open("/tmp/demofile2.txt", "a+")
-    f.write(str(os.getppid()))
-    f.close()
-    i=0
-    while True:
-        
-        print("test")
-        data = os.read(0, 4)
-        print(str(data))
-        print(len(data))
-        os.write(1, "hello")
-
-        
-        time.sleep(2)
-        pass
+    Client().loop()
 
 if __name__ == "__main__":
     setup_parent_proc()

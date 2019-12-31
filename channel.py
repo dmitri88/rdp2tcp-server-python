@@ -8,14 +8,19 @@ import ctypes
 from datetime import datetime
 from logging1 import debug,trace 
 from ctypes import *
-from ctypes.wintypes import *
+from server_action import PingAction
+try:
+    from ctypes.wintypes import *
+except:
+    pass
 import struct
 import ctypes_ext
 from ctypes_ext import executeDll
 import threading
 import action
-from action import PingAction, BaseAction
+from action import  BaseAction
 from tunnel import TunnelManager
+import time
 
 
 RDP2TCP_PING_DELAY = 5
@@ -25,8 +30,6 @@ EVT_CHAN_WRITE = 0
 EVT_CHAN_READ = 1
 EVT_TUNNEL = 2
 EVT_PING = 3
-
-wtsapi32Dll = ctypes.WinDLL("wtsapi32.dll")
 
 def network_write_int(bufferData,offset,val):
     converted = struct.pack('>I', val)
@@ -43,23 +46,109 @@ def channel_init(chan_name):
     vchannel.Open()
     return vchannel
 
-class VirtualChannel:
+class BiStreamChannel:
+    def __init__(self,server=True):
+        self.mutex = threading.Lock()
+        self._readBuffer = None
+        self.server=server
+    def Write(self,tid,command,data):
+        if data==None:
+            data = ""
+        direction = "[C]"
+        if self.server:
+            direction = "[S]"
+        debug(tid,direction+" channel_write "+str(command)+" #"+str(len(data))+" "+str(data))
+        binaryMsg = ctypes.create_string_buffer(len(data)+6,data)
+        network_write_int(binaryMsg,0,len(data)+2)
+        binaryMsg[4]=command
+        binaryMsg[5]=tid
+        offset = 6
+        for c in data:
+            binaryMsg[offset] = c
+            offset = offset + 1
+        trace(0,direction +" "+ str(bytearray(binaryMsg)))   
+            
+        if not self.WriteRaw(bytearray(binaryMsg)):
+            raise Exception("unable to write data")  
+        return True 
+    
+    def ReadEvent(self):
+        time.sleep(2)
+        if self._readBuffer !=None:
+            raise Exception("buffer not empty")
+        self.mutex.acquire()
+        data = self.ReadRaw(size=4)
+        if data==None or len(data)==0:
+            self.mutex.release()
+            return None
+        size = network_read_int(data, 0)
+        data2 = self.ReadRaw(size=size)
+        if data2 ==None:
+            self._readBuffer = data
+            self.mutex.release()
+            return None
+        data = data + data2
+        if self._readBuffer ==None:
+            self._readBuffer = data
+        else:
+            self._readBuffer += data 
+        
+        data = self._readBuffer
+        trace(0,"read len #" + str(len(data)))
+        
+        #data = self.ReadRaw(size=size);
+        #print(data)
+        if len(data)<size+4:
+            trace(0,"waiting for buffer:" + str(data))
+            self.mutex.release()
+            return None 
+            
+        if len(data)>size+4:
+            trace(0,"multiple message:" + str(data))
+
+        msg = self._readBuffer[4:size+4]
+        self._readBuffer = self._readBuffer[size+4:]
+        self.mutex.release()
+
+        trace(0,"message:"+str(msg))        
+        command = struct.unpack('<B', msg[0:1])[0]
+        tid = struct.unpack('<B', msg[1:2])[0]
+        action = BaseAction(command=command,tid=tid,data=msg[2:],server=self.server)
+         
+        #read all packets
+        #offset = 0
+        #actions = []
+        #while offset<len(data):
+        #    msg_len = network_read_int(data, offset)
+
+        #    actions.append(action)
+        
+        return [action]   
+    
+
+class VirtualChannel(BiStreamChannel):
+    
+    
     def __init__(self, name):
-        debug(0,"channel_init")
-        self.Wtsapi32Dll = ctypes.windll.LoadLibrary("Wtsapi32.dll")
+        super().__init__()
+        debug(0,"[S] channel_init")
         self._handle = None
         self._channel = None
         self.name= name
         self.last_ping = None
         self.__checkOp = 0
-        self._readBuffer = None
-        self.mutex = threading.Lock()
+        self.loadLibrary()
+    
+    def loadLibrary(self):
+        wtsapi32Dll = ctypes.WinDLL("wtsapi32.dll")
+        self.Wtsapi32Dll = ctypes.windll.LoadLibrary("Wtsapi32.dll")
+        
     
     def ActionWait(self):
         self.__checkOp = self.__checkOp+1 
         if self.__checkOp>=5:
             self.__checkOp=0
-            return self.Read()
+            return self.ReadEvent()
         else:
             return self.Ping()
         
@@ -78,8 +167,8 @@ class VirtualChannel:
         #connect.argtypes = [ctypes.wintypes.LPVOID]
         #print(connect(self._handle))
         
-        self._readEvent = ctypes.windll.kernel32.CreateEventA(None, True, True, None);  # @UndefinedVariable
-        self._writeEvent = ctypes.windll.kernel32.CreateEventA(None, True, True,None);  # @UndefinedVariable
+        #self._readEvent = ctypes.windll.kernel32.CreateEventA(None, True, True, None);  # @UndefinedVariable
+        #self._writeEvent = ctypes.windll.kernel32.CreateEventA(None, True, True,None);  # @UndefinedVariable
         
         buffer_ptr = ctypes.POINTER(ctypes.wintypes.LPARAM)()
         bytes_read = ctypes.c_ulong()
@@ -108,6 +197,7 @@ class VirtualChannel:
             self._handle = None
             self.mutex.release()
         
+        time.sleep(15)
     
     def ReadRaw(self, size=None,timeout=100):
         buffer_len = 4096
@@ -165,66 +255,7 @@ class VirtualChannel:
             return self.Write(0,action.R2TCMD_PING,None);
         return (0,now);     
     
-    def Write(self,tid,command,data):
-        if data==None:
-            data = ""
-        debug(tid,"channel_write "+str(command)+" #"+str(len(data))+" "+str(data))
-        binaryMsg = ctypes.create_string_buffer(len(data)+6,data)
-        network_write_int(binaryMsg,0,len(data)+2)
-        binaryMsg[4]=command
-        binaryMsg[5]=tid
-        offset = 6
-        for c in data:
-            binaryMsg[offset] = c
-            offset = offset + 1
-        trace(0,bytearray(binaryMsg))   
-            
-        if not self.WriteRaw(bytearray(binaryMsg)):
-            raise Exception("unable to write data")  
-        return True 
-    
-    def Read(self):
-        data = self.ReadRaw();
-        if data==None:
-            return None
-        
-        self.mutex.acquire()
-        if self._readBuffer ==None:
-            self._readBuffer = data
-        else:
-            self._readBuffer += data 
-        
-        data = self._readBuffer
-        trace(0,"read len #" + str(len(data)))
-        size = network_read_int(data, 0)
-        #data = self.ReadRaw(size=size);
-        #print(data)
-        if len(data)<size+4:
-            trace(0,"waiting for buffer:" + str(data))
-            self.mutex.release()
-            return None 
-            
-        if len(data)>size+4:
-            trace(0,"multiple message:" + str(data))
 
-        msg = self._readBuffer[4:size+4]
-        self._readBuffer = self._readBuffer[size+4:]
-        self.mutex.release()
-
-        trace(0,"message:"+str(msg))        
-        command = struct.unpack('<B', msg[0:1])[0]
-        tid = struct.unpack('<B', msg[1:2])[0]
-        action = BaseAction(command=command,tid=tid,data=msg[2:])
-         
-        #read all packets
-        #offset = 0
-        #actions = []
-        #while offset<len(data):
-        #    msg_len = network_read_int(data, offset)
-
-        #    actions.append(action)
-        
-        return [action]   
     
     def Ping(self):
         return [PingAction()]
