@@ -4,21 +4,32 @@ Created on Dec 31, 2019
 @author: dmitri
 '''
 from action import BaseAction, R2TCMD_PING,\
-    TUNAF_IPV4, R2TCMD_CONN
+    TUNAF_IPV4, R2TCMD_CONN, R2TCMD_PINGECHO
 import struct
 from logging1 import debug,trace
 from tunnel import TunnelManager
 import socket
     
 class PingAction(BaseAction):
-    def __init__(self,tid=0):
-        super(PingAction, self).__init__(tid=0,command=R2TCMD_PING)
+    def __init__(self,tid=0,server=True):
+        super(PingAction, self).__init__(tid=tid,command=R2TCMD_PING,server=server)
         
-    def Ack(self,vchannel):
-        vchannel.PingRaw()    
+    def Ack(self,vchannel):   
         pass
     def Execute(self,vchannel):
+        vchannel.PingRaw()
         pass    
+    
+class PingEchoAction(BaseAction):
+    def __init__(self,tid=0,server=True):
+        super().__init__(tid=tid,command=R2TCMD_PINGECHO,server=server)
+        
+    def Ack(self,vchannel):   
+        pass
+    def Execute(self,vchannel):
+        if not vchannel.connected: 
+            vchannel.connected=True
+            vchannel.onConnect()      
         
 class ConnectAction(BaseAction):
     def Ack(self,vchannel):
@@ -36,7 +47,7 @@ class ConnectAction(BaseAction):
         #vchannel.Write(self.tunnelId,R2TCMD_PING,None)
     
     def Execute(self,vchannel):
-        print("execute for action"+str(self))
+        trace(self.tid,"execute for action"+str(self),server=self.server)
         tunnel=TunnelManager.get(self.tunnelId)
         tunnel.init(vchannel,self.host,self.port)
 
@@ -48,11 +59,11 @@ class ConnectAction(BaseAction):
     
 class CloseAction(BaseAction):
     def Ack(self,vchannel):
-        trace(self.tid,"ack for action"+str(self))
+        trace(self.tid,"ack for action"+str(self),server=self.server)
         #vchannel.Write(self.tunnelId,R2TCMD_CLOSE,None)
     
     def Execute(self,vchannel):
-        trace(self.tid,"execute for action"+str(self))
+        trace(self.tid,"execute for action"+str(self),server=self.server)
         tunnel=TunnelManager.get(self.tunnelId)  
         #tunnel.handle_close()  
         tunnel.close()
@@ -64,6 +75,6 @@ class DataAction(BaseAction):
         pass
     
     def Execute(self,vchannel):
-        trace(self.tid,"execute for action"+str(self))
-        tunnel=TunnelManager.get(self.tunnelId)  
+        trace(self.tid,"execute for action"+str(self),server=self.server)
         tunnel.write(self.data)  
+        

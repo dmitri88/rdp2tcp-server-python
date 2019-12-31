@@ -94,7 +94,12 @@ class TestClient(Client):
     def ReadRaw(self,size=0):
         return tempWrite.recv(size)
     def WriteRaw(self,data):
-        tempRead.sendall(data.encode('ascii'))
+        if data==None:
+            return 
+        if type(data)==str:
+            data=data.encode('ascii')
+        tempRead.sendall(data)
+        return True
 
 class VirtualChannel(OrigVirtualChannel):
     def loadLibrary(self):

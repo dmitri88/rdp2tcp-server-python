@@ -22,12 +22,6 @@ class Client(BiStreamChannel):
         return os.read(0, size)
     def WriteRaw(self,data):
         os.write(1, data)
-    
-    def loop(self):
-        while True:
-            self.ReadEvent()
-            #self._write("hello")
-            time.sleep(1)
 
         
 

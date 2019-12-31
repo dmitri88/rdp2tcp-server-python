@@ -45,7 +45,7 @@ class TunnelManager:
         if map is None:
             map = asyncore.socket_map
     
-        if use_poll and hasattr(select, 'poll'):
+        if use_poll and hasattr(select, 'poll'):  # @UndefinedVariable
             poll_fun = asyncore.poll2
         else:
             poll_fun = asyncore.poll
@@ -94,7 +94,7 @@ class Tunnel(asyncore.dispatcher_with_send):
         #self.socks.setsockopt(socks.IPPROTO_TCP, socks.TCP_KEEPIDLE, 10)
         #self.socks.setsockopt(socks.IPPROTO_TCP, socks.TCP_KEEPINTVL, 10)
         #self.socks.setsockopt(socks.IPPROTO_TCP, socks.TCP_KEEPCNT, 6)
-        self.socket.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 10000, 3000))
+        self.socket.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 10000, 3000))  # @UndefinedVariable
         self.connect( (host, port) )  
         
         

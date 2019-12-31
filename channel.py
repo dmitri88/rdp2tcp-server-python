@@ -6,9 +6,9 @@ Created on Dec 12, 2019
 #from ctypes import windll
 import ctypes
 from datetime import datetime
-from logging1 import debug,trace 
+from logging1 import debug,trace,info 
 from ctypes import *
-from server_action import PingAction
+from action_server import PingAction
 try:
     from ctypes.wintypes import *
 except:
@@ -18,7 +18,7 @@ import ctypes_ext
 from ctypes_ext import executeDll
 import threading
 import action
-from action import  BaseAction
+from action import  BaseAction, WaitAction
 from tunnel import TunnelManager
 import time
 
@@ -51,13 +51,14 @@ class BiStreamChannel:
         self.mutex = threading.Lock()
         self._readBuffer = None
         self.server=server
+        self.last_ping = None
+        self.__checkOp = 0
+        self.pingAllowed=server
+        self.connected = False
     def Write(self,tid,command,data):
         if data==None:
             data = ""
-        direction = "[C]"
-        if self.server:
-            direction = "[S]"
-        debug(tid,direction+" channel_write "+str(command)+" #"+str(len(data))+" "+str(data))
+        debug(tid,"channel_write "+str(command)+" #"+str(len(data))+" "+str(data),server=self.server)
         binaryMsg = ctypes.create_string_buffer(len(data)+6,data)
         network_write_int(binaryMsg,0,len(data)+2)
         binaryMsg[4]=command
@@ -66,15 +67,14 @@ class BiStreamChannel:
         for c in data:
             binaryMsg[offset] = c
             offset = offset + 1
-        trace(0,direction +" "+ str(bytearray(binaryMsg)))   
+        trace(0,str(bytearray(binaryMsg)),server=self.server)   
             
         if not self.WriteRaw(bytearray(binaryMsg)):
             raise Exception("unable to write data")  
         return True 
     
     def ReadEvent(self):
-        time.sleep(2)
-        if self._readBuffer !=None:
+        if self._readBuffer !=None and self._readBuffer!=b'':
             raise Exception("buffer not empty")
         self.mutex.acquire()
         data = self.ReadRaw(size=4)
@@ -94,7 +94,7 @@ class BiStreamChannel:
             self._readBuffer += data 
         
         data = self._readBuffer
-        trace(0,"read len #" + str(len(data)))
+        trace(0,"read len #" + str(len(data)),server=self.server)
         
         #data = self.ReadRaw(size=size);
         #print(data)
@@ -110,7 +110,7 @@ class BiStreamChannel:
         self._readBuffer = self._readBuffer[size+4:]
         self.mutex.release()
 
-        trace(0,"message:"+str(msg))        
+        trace(0,"message:"+str(msg),server=self.server)        
         command = struct.unpack('<B', msg[0:1])[0]
         tid = struct.unpack('<B', msg[1:2])[0]
         action = BaseAction(command=command,tid=tid,data=msg[2:],server=self.server)
@@ -124,19 +124,52 @@ class BiStreamChannel:
         #    actions.append(action)
         
         return [action]   
+    def PingRaw(self):
+        self.last_ping
+        now = datetime.now()
+        if self.last_ping==None or (now - self.last_ping).total_seconds()>=RDP2TCP_PING_DELAY: 
+            self.last_ping = now
+            return self.Write(0,action.R2TCMD_PING,None);
+        return (0,now)   
     
+    def loop(self):
+        actions=[None]    
+        while actions:
+            #try:
+            actions = self.ActionWait()
+            if actions!=None and len(actions)>0:
+                for action in actions:
+                    action.Execute(self)
+                    action.Ack(self)
+            #except:
+            #    break
+            continue
+        
+    def ActionWait(self):
+        event = self.ReadEvent()
+        self.__checkOp = self.__checkOp+1
+        if event:
+            return event 
+        if self.__checkOp>=5 or not self.pingAllowed:
+            self.__checkOp=0
+            return [WaitAction(5000)]
+        else:
+            return self.Ping()
+        
+    def onConnect(self):
+        info(0,"channel connected",server=self.server)
+                
+   
 
 class VirtualChannel(BiStreamChannel):
     
     
     def __init__(self, name):
         super().__init__()
-        debug(0,"[S] channel_init")
+        debug(0,"channel_init",server=self.server)
         self._handle = None
         self._channel = None
         self.name= name
-        self.last_ping = None
-        self.__checkOp = 0
         self.loadLibrary()
     
     def loadLibrary(self):
@@ -144,13 +177,7 @@ class VirtualChannel(BiStreamChannel):
         self.Wtsapi32Dll = ctypes.windll.LoadLibrary("Wtsapi32.dll")
         
     
-    def ActionWait(self):
-        self.__checkOp = self.__checkOp+1 
-        if self.__checkOp>=5:
-            self.__checkOp=0
-            return self.ReadEvent()
-        else:
-            return self.Ping()
+
         
     def Open(self):
         self.mutex.acquire()
@@ -247,16 +274,10 @@ class VirtualChannel(BiStreamChannel):
             raise Exception("len is not equal %d != %d"% (byte_written.value,msg_len))
         return True
     
-    def PingRaw(self):
-        self.last_ping
-        now = datetime.now()
-        if self.last_ping==None or (now - self.last_ping).total_seconds()>=RDP2TCP_PING_DELAY: 
-            self.last_ping = now
-            return self.Write(0,action.R2TCMD_PING,None);
-        return (0,now);     
+
     
 
     
     def Ping(self):
-        return [PingAction()]
+        return [PingAction(server=self.server)]
 

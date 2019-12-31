@@ -37,16 +37,7 @@ def start_server():
         if not vchannel:
             break
         actions = vchannel.Ping()
-        while actions:
-            #try:
-            actions = vchannel.ActionWait()
-            if actions!=None and len(actions)>0:
-                for action in actions:
-                    action.Execute(vchannel)
-                    action.Ack(vchannel)
-            #except:
-            #    break
-            continue
+        vchannel.loop()
         vchannel.Close()
 
 
