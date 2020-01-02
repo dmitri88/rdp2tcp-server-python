@@ -39,7 +39,7 @@ def network_write_int(bufferData,offset,val):
         idx = idx + 1
         
 def network_read_int(bufferData,offset):
-    return int.from_bytes(bufferData[0:4] , byteorder='big')   
+    return int.from_bytes(bufferData[offset:offset+4] , byteorder='big')   
 
 def channel_init(chan_name):
     vchannel = VirtualChannel(chan_name)
@@ -49,12 +49,15 @@ def channel_init(chan_name):
 class BiStreamChannel:
     def __init__(self,server=True):
         self.mutex = threading.Lock()
+        self.mutex2 = threading.Lock()
         self._readBuffer = None
         self.server=server
         self.last_ping = None
         self.__checkOp = 0
         self.pingAllowed=server
         self.connected = False
+        self.terminated = False
+        
     def Write(self,tid,command,data):
         if data==None:
             data = ""
@@ -74,33 +77,51 @@ class BiStreamChannel:
         return True 
     
     def ReadEvent(self):
+        self.mutex2.acquire()
         if self._readBuffer !=None and self._readBuffer!=b'':
-            raise Exception("buffer not empty")
-        self.mutex.acquire()
-        data = self.ReadRaw(size=4)
-        if data==None or len(data)==0:
-            self.mutex.release()
-            return None
-        size = network_read_int(data, 0)
-        data2 = self.ReadRaw(size=size)
-        if data2 ==None:
-            self._readBuffer = data
-            self.mutex.release()
-            return None
-        data = data + data2
-        if self._readBuffer ==None:
-            self._readBuffer = data
-        else:
-            self._readBuffer += data 
+            info(0,"buffer not empty " + str(self._readBuffer),server=self.server)
+            if len(self._readBuffer)>5:
+                size = network_read_int(self._readBuffer, 0)
+                if size == 100663296:
+                    self._readBuffer = self._readBuffer[4:]
+                else:
+                    #find ping
+                    for i in range(0,len(self._readBuffer)-4):
+                        size = network_read_int(self._readBuffer, i)
+                        if size==2:
+                            self._readBuffer = self._readBuffer[i:] 
+            else:
+                self._readBuffer = None
+
+                
+            #raise Exception("buffer not empty")
+        if self._readBuffer==None:
+            self._readBuffer = b''
+        if len(self._readBuffer)<4:
+            data = self.ReadRaw(size=4-len(self._readBuffer))
+            if data==None or len(data)==0:
+                self.mutex2.release()
+                return None
+            self._readBuffer = self._readBuffer + data 
+        size = network_read_int(self._readBuffer, 0)
+        if len(self._readBuffer)<size+4:
+            needed = size+4 - len(self._readBuffer)
+            data2 = self.ReadRaw(size=needed)
+            if data2 ==None:
+                self.mutex2.release()
+                return None
+            self._readBuffer += data2
         
         data = self._readBuffer
-        trace(0,"read len #" + str(len(data)),server=self.server)
+        trace(0,"read len " + str(len(data))+"/"+str(size),server=self.server)
+        trace(0,"read data " + str(data),server=self.server)
+        trace(0,"read buffer " + str(self._readBuffer),server=self.server)
         
         #data = self.ReadRaw(size=size);
         #print(data)
         if len(data)<size+4:
             trace(0,"waiting for buffer:" + str(data))
-            self.mutex.release()
+            self.mutex2.release()
             return None 
             
         if len(data)>size+4:
@@ -108,13 +129,13 @@ class BiStreamChannel:
 
         msg = self._readBuffer[4:size+4]
         self._readBuffer = self._readBuffer[size+4:]
-        self.mutex.release()
+        self.mutex2.release()
 
         trace(0,"message:"+str(msg),server=self.server)        
         command = struct.unpack('<B', msg[0:1])[0]
         tid = struct.unpack('<B', msg[1:2])[0]
         action = BaseAction(command=command,tid=tid,data=msg[2:],server=self.server)
-         
+        print() 
         #read all packets
         #offset = 0
         #actions = []
@@ -134,7 +155,7 @@ class BiStreamChannel:
     
     def loop(self):
         actions=[None]    
-        while actions:
+        while actions and not self.terminated:
             #try:
             actions = self.ActionWait()
             if actions!=None and len(actions)>0:
@@ -152,12 +173,18 @@ class BiStreamChannel:
             return event 
         if self.__checkOp>=5 or not self.pingAllowed:
             self.__checkOp=0
-            return [WaitAction(5000)]
+            waitTime = 5000
+            if not self.connected:
+                waitTime = 100
+            return [WaitAction(waitTime)]
         else:
             return self.Ping()
         
     def onConnect(self):
         info(0,"channel connected",server=self.server)
+        
+    def Terminate(self):
+        self.terminated = True
                 
    
 
@@ -226,7 +253,7 @@ class VirtualChannel(BiStreamChannel):
         
         time.sleep(15)
     
-    def ReadRaw(self, size=None,timeout=100):
+    def ReadRaw(self, size=None,timeout=1):
         buffer_len = 4096
         if size!=None:
             buffer_len = size

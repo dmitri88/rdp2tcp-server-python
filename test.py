@@ -5,7 +5,7 @@ Created on Dec 27, 2019
 '''
 import threading
 from client import Client
-from server import start_server
+from server import Server
 from channel import VirtualChannel as OrigVirtualChannel
 import channel
 import tempfile
@@ -121,11 +121,43 @@ channel.VirtualChannel=VirtualChannel
 
 
 if __name__ == "__main__":
+    
+    print("test 2")
+    print("starting server")    
+    server = Server()
+    serverThread = threading.Thread(target=server.loop, args=())
+    serverThread.start()
+    
+    time.sleep(6)
+    client = TestClient()
     print("starting client")
-    clientThread = threading.Thread(target=TestClient().loop, args=())
+    clientThread = threading.Thread(target=client.loop, args=())
+    clientThread.start()
+
+
+    
+    time.sleep(2)
+    client.Terminate()
+    server.Terminate()
+    
+    
+    print("test 1")
+    client = TestClient()
+    print("starting client")
+    clientThread = threading.Thread(target=client.loop, args=())
     clientThread.start()
 
     print("starting server")    
-    serverThread = threading.Thread(target=start_server, args=())
+    server = Server()
+    serverThread = threading.Thread(target=server.loop, args=())
     serverThread.start()
+    
+    time.sleep(2)
+    client.Terminate()
+    server.Terminate()
+    
+    
+    
+    
+    
     
