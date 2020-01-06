@@ -31,19 +31,17 @@ class SocksProxy(StreamRequestHandler):
 
         # get available methods
         methods = self.get_available_methods(nmethods)
-
-        # accept only USERNAME/PASSWORD auth
-        if 2 not in set(methods):
+        # accept only USERNAME/PASSWORD auth OR noauth
+        if 2 not in set(methods) and 0 not in set(methods):
             # close connection
             self.server.close_request(self.request)
             return
-
         # send welcome message
-        self.connection.sendall(struct.pack("!BB", SOCKS_VERSION, 2))
+        self.connection.sendall(struct.pack("!BB", SOCKS_VERSION, 0))
 
-        if not self.verify_credentials():
-            return
-
+        if 2 in set(methods):
+            if not self.verify_credentials():
+                return
         # request
         version, cmd, _, address_type = struct.unpack("!BBBB", self.connection.recv(4))
         assert version == SOCKS_VERSION
@@ -122,7 +120,7 @@ class SocksProxy(StreamRequestHandler):
 
             # wait until client or remote is available for read
             r, w, e = select.select([client, remote], [], [])
-
+            print("connected")
             if client in r:
                 data = client.recv(4096)
                 if remote.send(data) <= 0:
@@ -135,5 +133,6 @@ class SocksProxy(StreamRequestHandler):
 
 
 if __name__ == '__main__':
+    #with ThreadingTCPServer(('172.16.1.128', 9011), SocksProxy) as server:
     with ThreadingTCPServer(('127.0.0.1', 9011), SocksProxy) as server:
         server.serve_forever()
