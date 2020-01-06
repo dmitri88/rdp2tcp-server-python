@@ -225,14 +225,25 @@ class VirtualChannel:
         if len(data)>size+4:
             trace(0,"multiple message:" + str(data))
 
-        msg = self._readBuffer[4:size+4]
-        self._readBuffer = self._readBuffer[size+4:]
+        offset = 0
+        messages = []
+        while len(self._readBuffer)>=size+4:
+            msg = self._readBuffer[offset+4:size+offset+4]
+            self._readBuffer = self._readBuffer[offset+size+4:]
+            if len(self._readBuffer)>=4:
+                size = network_read_int(self._readBuffer, 0)
+            else:
+                size = 0
+            messages.append(msg)
         self.mutex.release()
 
-        trace(0,"message:"+str(msg))        
-        command = struct.unpack('<B', msg[0:1])[0]
-        tid = struct.unpack('<B', msg[1:2])[0]
-        action = BaseAction(command=command,tid=tid,data=msg[2:])
+        actions = []
+        for msg in messages:
+            trace(0,"message:"+str(msg))        
+            command = struct.unpack('<B', msg[0:1])[0]
+            tid = struct.unpack('<B', msg[1:2])[0]
+            action = BaseAction(command=command,tid=tid,data=msg[2:])
+            actions.append(action)
          
         #read all packets
         #offset = 0
@@ -242,7 +253,7 @@ class VirtualChannel:
 
         #    actions.append(action)
         
-        return [action]   
+        return actions 
     
     def Ping(self):
         return [PingAction()]

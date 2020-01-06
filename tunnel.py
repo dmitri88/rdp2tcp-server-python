@@ -7,6 +7,12 @@ import asyncore
 import socket
 import threading
 import action
+from socket import EWOULDBLOCK
+from errno import EALREADY, EINPROGRESS, EINVAL,\
+    EISCONN, errorcode, EBADF, ENOTCONN
+import os
+from asyncore import _DISCONNECTED
+import time
 
 class TunnelManager:
     
@@ -45,14 +51,17 @@ class TunnelManager:
     
         if count is None:
             while map:
-                print("pooooooooool")
+                #print("pooooooooool")
                 keys = list(clz.keys())
                 for c in keys:
-                    print("pool #"+str(c))
+                    #print("pool #"+str(c))
                     tunnel = clz.get(c)
+                    #if tunnel.initialized and tunnel.checkalive:
+                    #    tunnel.handle_read()
                     #if tunnel.initialized and tunnel.checkalive:
                     #    tunnel.check_alive()
                 poll_fun(timeout, map)
+                #time.sleep(0.)
     
         else:
             while map and count > 0:
@@ -61,29 +70,59 @@ class TunnelManager:
         
         print("EXIT POOL")
         #create new map
-        keys = list(clz.keys())
-        for c in keys:
-            tunnel = clz.get(c)
-            map[tunnel._fileno]=tunnel
+        #keys = list(clz.keys())
+        #for c in keys:
+            #tunnel = clz.get(c)
+            #map[tunnel._fileno]=tunnel
             #tunnel.reconnect(restartPool = False)
-        #clz.restartPool()                
+        clz.restartPool()                
         
         
     
-class Tunnel(asyncore.dispatcher_with_send):
+class Tunnel(asyncore.dispatcher):
     
     def __init__(self,id):
-        asyncore.dispatcher_with_send.__init__(self)
+        #asyncore.dispatcher_with_send.__init__(self)
+        asyncore.dispatcher.__init__(self)
         self.id=id
+        self.initialized = False
+        
+        self.checkalive = True
     
     def init(self,vchannel,host,port):
+        self.host = host
+        self.port = port
+ 
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
         self.connect( (host, port) )  
         self.vchannel=vchannel
+        self.initialized = True
         TunnelManager.restartPool()
         
     def write(self,data):
-        self.send(data)
+        #if self.checkalive:
+        #    self.recv(0)
+        try:
+            self.send(data)
+        except OSError as e:
+            if e.winerror==10038: #socks closed. reconnect first
+                asyncore.dispatcher.__init__(self)
+                self.init(self.vchannel, self.host, self.port)
+
+                print("!222")
+                self.reconnect()
+                print("!333")
+                #asyncore.dispatcher_with_send.__init__(self)
+                self.send(data)
+                print("!444")
+            else:
+                raise e
+        #self.handle_read()
+    def reconnect(self,restartPool = True):
+        self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.connect( (self.host, self.port) )
+        if  restartPool:
+            TunnelManager.restartPool()
                   
     
     def handle_connect(self):
@@ -102,4 +141,5 @@ class Tunnel(asyncore.dispatcher_with_send):
         print("check alive #"+str(self.id))
     #def handle_write(self):
     #    sent = self.send(self.buffer)
-    #    self.buffer = self.buffer[sent:]    
+
+    
