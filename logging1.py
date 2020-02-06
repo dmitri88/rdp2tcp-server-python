@@ -9,7 +9,8 @@ def debug(tun_id,msg):
     _log(tun_id,msg)
     
 def trace(tun_id,msg):
-    _log(tun_id,msg)
+    #_log(tun_id,msg)
+    pass
     
 def _log(tun_id,msg):
     print("#%d %s" %(tun_id,msg))

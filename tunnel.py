@@ -27,6 +27,10 @@ class TunnelManager:
         return clz.tunnels[num]
     
     @classmethod
+    def remove(clz,num):
+        del clz.tunnels[num] 
+    
+    @classmethod
     def restartPool(clz):
         if clz.poolThread != None:
             if clz.poolThread.isAlive():
@@ -60,7 +64,11 @@ class TunnelManager:
                     #    tunnel.handle_read()
                     #if tunnel.initialized and tunnel.checkalive:
                     #    tunnel.check_alive()
+                #try:    
                 poll_fun(timeout, map)
+                #except:
+                    
+                    
                 #time.sleep(0.)
     
         else:
@@ -100,12 +108,15 @@ class Tunnel(asyncore.dispatcher):
         TunnelManager.restartPool()
         
     def write(self,data):
-        #if self.checkalive:
-        #    self.recv(0)
+        if self.socket ==None:
+            asyncore.dispatcher.__init__(self)
+            self.init(self.vchannel, self.host, self.port)
+
         try:
             self.send(data)
         except OSError as e:
             if e.winerror==10038: #socks closed. reconnect first
+                self.close()
                 asyncore.dispatcher.__init__(self)
                 self.init(self.vchannel, self.host, self.port)
 
@@ -129,6 +140,7 @@ class Tunnel(asyncore.dispatcher):
         pass
 
     def handle_close(self):
+        TunnelManager.remove(self.id)
         self.close()
 
     def handle_read(self):

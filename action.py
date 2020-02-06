@@ -118,6 +118,9 @@ class DataAction(BaseAction):
         pass
     
     def Execute(self,vchannel):
-        print("execute for action"+str(self))
-        tunnel=TunnelManager.get(self.tunnelId)  
+        tunnel=TunnelManager.get(self.tunnelId)
+        if not  hasattr(tunnel,'vchannel'):  
+            tunnel.vchannel = vchannel
+            tunnel.host="127.0.0.1"
+            tunnel.port=9011
         tunnel.write(self.data)         

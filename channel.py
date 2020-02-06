@@ -186,7 +186,7 @@ class VirtualChannel:
     def Write(self,tid,command,data):
         if data==None:
             data = ""
-        debug(tid,"channel_write "+str(command)+" #"+str(len(data))+" "+str(data))
+        trace(tid,"channel_write "+str(command)+" #"+str(len(data))+" "+str(data))
         binaryMsg = ctypes.create_string_buffer(len(data)+6,data)
         network_write_int(binaryMsg,0,len(data)+2)
         binaryMsg[4]=command

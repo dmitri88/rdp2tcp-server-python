@@ -25,6 +25,11 @@ class SocksProxy(StreamRequestHandler):
         header = self.connection.recv(2)
         version, nmethods = struct.unpack("!BB", header)
 
+        print("socks version %d" % (version))
+        if version != SOCKS_VERSION:
+            reply = self.generate_failed_reply(1, 5)
+            self.connection.sendall(reply)
+            return
         # socks 5
         assert version == SOCKS_VERSION
         assert nmethods > 0
@@ -44,7 +49,7 @@ class SocksProxy(StreamRequestHandler):
                 return
         # request
         version, cmd, _, address_type = struct.unpack("!BBBB", self.connection.recv(4))
-        assert version == SOCKS_VERSION
+
 
         if address_type == 1:  # IPv4
             address = socket.inet_ntoa(self.connection.recv(4))
