@@ -122,7 +122,13 @@ class VirtualChannel:
             
         if self._handle is not None:
             self.mutex.acquire()
-            self.Wtsapi32Dll.WTSVirtualChannelClose(self._handle)
+            #self.Wtsapi32Dll.WTSVirtualChannelClose(self._handle)
+            
+            func = self.Wtsapi32Dll.WTSVirtualChannelClose
+            func.restype = ctypes.c_bool
+            func.argtypes = [ctypes.wintypes.LPVOID]
+            func(self._handle)
+            
             self._handle = None
             self.mutex.release()
         

@@ -1,5 +1,6 @@
 import sys
 import threading
+import traceback
 sys.path.append("W:\\src\\rdp2tcp-server-python")
 import time
 import channel
@@ -33,6 +34,7 @@ def start_server():
     socksThread.start()
     
     while True:
+        
         vchannel = channel.channel_init(chan_name)
         if not vchannel:
             break
@@ -43,37 +45,13 @@ def start_server():
             if actions!=None and len(actions)>0:
                 for action in actions:
                     action.Execute(vchannel)
-                    action.Ack(vchannel)
-            #except:
-            #    break
-            continue
-            #old C code
-            ret = -1
-            (event,tun,h) = vchannel.EventWait()
-            if event == channel.EVT_CHAN_WRITE:
-                debug(0, "EVT_CHAN_WRITE");
-                ret = channel_write_event();
-                if not ret:
-                    vchannel.last_ping = now;
-            elif event == channel.EVT_CHAN_READ:
-                debug(0, "EVT_CHAN_READ");
-                action = vchannel.ReadAction();
-                if action:
-                    action.Ack()
-                    vchannel.Ping()         
-            elif event == channel.EVT_TUNNEL:
-                debug(0, "EVT_TUNNEL");
-                ret = tunnel_event(tun,h);   
-                  
-            elif event == channel.EVT_PING:
-                ret = 0
-                if channel_is_connected():
-                    debug(0, "EVT_PING")
-                    (ret,now) = vchannel.Ping()
-                else :
-                    debug(0, "channel still disconnected");
+                    try:
+                        action.Ack(vchannel)
+                    except Exception:#disconnected?
+                        traceback.print_exc(file=sys.stdout)
+                        ping_actions = None
 
-
+        time.sleep(10)
         vchannel.Close()
 
 
